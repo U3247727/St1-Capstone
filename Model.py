@@ -1,56 +1,63 @@
 import pandas as pd
-
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 
 
-# reading the csv
-df = pd.read_csv('Australian Vehicle Prices.csv')
+def load_and_preprocess_data(filepath):
+    # load data from CSV
+    # handle missing values and drop certain chosen columns
+    df = pd.read_csv(filepath)
+    df['Kilometres'] = pd.to_numeric(df['Kilometres'], errors='coerce')
+    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
+    df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
+    df.dropna(inplace=True)
 
-# replacing all the non-numeric values with NaN (Not a Number)
-df['Kilometres'] = pd.to_numeric(df['Kilometres'], errors='coerce')
-df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
-df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
+    reject_columns = [
+        'Car/Suv', 'Title', 'UsedOrNew', 'Transmission', 'Engine',
+        'DriveType', 'FuelType', 'FuelConsumption', 'ColourExtInt',
+        'Location', 'CylindersinEngine', 'BodyType', 'Doors', 'Seats'
+    ]
+    df = df.drop(reject_columns, axis=1)
 
-# dropping all the rows with any NaN values
-df.dropna(inplace=True)
+    df_encoded = pd.get_dummies(df, columns=['Brand', 'Model'])
+    return df_encoded
 
-# columns to be dropped
-rejectColumns = [
-    'Car/Suv', 'Title', 'UsedOrNew', 'Transmission', 'Engine',
-    'DriveType', 'FuelType', 'FuelConsumption', 'ColourExtInt',
-    'Location', 'CylindersinEngine', 'BodyType', 'Doors', 'Seats'
-]
 
-# dropping the columns
-df = df.drop(rejectColumns, axis=1)
+def setup_data(df):
+    # prepare features and target based on the the df
+    X = df.drop('Price', axis=1)
+    y = df['Price']
+    return X, y
 
-# applying one-hot encoding to 'Brand' and 'Model' so that i can make numerical
-df_encoded = pd.get_dummies(df, columns=['Brand', 'Model'])
 
-# prepare features and target
-X = df_encoded.drop('Price', axis=1)
-y = df_encoded['Price']
+def evaluate_models(X, y, n_splits=4):
+    # evaluate the two different models using kf cross validate
+    kf = KFold(n_splits=n_splits, shuffle=False)
+    models = {
+        'Linear Regression': LinearRegression(),
+        'Random Forest': RandomForestRegressor(n_estimators=20, random_state=42),
+    }
+    model_scores = {}
+    for name, model in models.items():
+        scores = cross_val_score(model, X, y, cv=kf, scoring='neg_mean_squared_error')
+        model_scores[name] = (-scores.mean()) ** 0.5  # Convert from negative MSE to RMSE
+        print(f"{name} RMSE: {model_scores[name]}")
+    return model_scores
 
-# set up k-folds
-kf = KFold(n_splits=4, shuffle=False)
 
-# different models to evaluate
-models = {
-    'Linear Regression': LinearRegression(),
-    'Random Forest': RandomForestRegressor(n_estimators=20, random_state=42),
-}
+def calculate_average_price_by_year(df):
+    # average price for years
+    return df.groupby('Year')['Price'].mean()
 
-# evaluating models using cross-validation from the above kfs
-model_scores = {}
-for name, model in models.items():
-    scores = cross_val_score(model, X, y, cv=kf, scoring='neg_mean_squared_error')
-    model_scores[name] = (-scores.mean()) ** 0.5  # Convert from negative MSE to RMSE
-    print(model_scores[name])
 
-# output model scores:
-for model_name, rmse in model_scores.items():
-    print(f"{model_name} RMSE: {rmse}")
+def main():
+    filepath = 'Australian Vehicle Prices.csv'
+    df_encoded = load_and_preprocess_data(filepath)
+    X, y = setup_data(df_encoded)
+    model_scores = evaluate_models(X, y)
 
+
+if __name__ == "__main__":
+    main()
